@@ -8,7 +8,7 @@ export default function Home() {
   return (
     <main className={styles.main}>
       <div className={styles.container}>
-        <h1 className={styles.title}>OpenPose Motion Tracker</h1>
+        <h1 className={styles.title}>Google MediaPipe Holistic Tracker</h1>
         <p className={styles.subtitle}>
           Real-time tracking with full body, face, and hands detection
         </p>
