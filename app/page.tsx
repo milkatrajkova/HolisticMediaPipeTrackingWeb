@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import OpenPoseTracker from '@/components/OpenPoseTracker';
+import MediaPipeHolisticTracker from '@/components/MediaPipeHolisticTracker';
 import styles from './page.module.css';
 
 export default function Home() {
@@ -12,7 +12,7 @@ export default function Home() {
         <p className={styles.subtitle}>
           Real-time tracking with full body, face, and hands detection
         </p>
-        <OpenPoseTracker />
+        <MediaPipeHolisticTracker />
       </div>
     </main>
   );

@@ -7,7 +7,7 @@ import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import { POSE_CONNECTIONS } from '@mediapipe/pose';
 import { HAND_CONNECTIONS } from '@mediapipe/hands';
 import { FACEMESH_TESSELATION, FACEMESH_CONTOURS } from '@mediapipe/face_mesh';
-import styles from './OpenPoseTracker.module.css';
+import styles from './MediaPipeHolisticTracker.module.css';
 
 interface PoseData {
   timestamp: number;
@@ -17,7 +17,7 @@ interface PoseData {
   rightHand: any;
 }
 
-export default function OpenPoseTracker() {
+export default function MediaPipeHolisticTracker() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isTracking, setIsTracking] = useState(false);
@@ -242,7 +242,7 @@ export default function OpenPoseTracker() {
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `openpose-data-${Date.now()}.json`;
+    link.download = `mediapipe-holistic-data-${Date.now()}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

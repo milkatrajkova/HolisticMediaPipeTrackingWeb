@@ -1,4 +1,4 @@
-# OpenPose Motion Tracker
+# Google MediaPipe Holistic Tracker
 
 A real-time motion tracking web application using MediaPipe Holistic for comprehensive pose, face, and hand detection. Deployable on Vercel.
 

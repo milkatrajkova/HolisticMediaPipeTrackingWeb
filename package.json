@@ -1,5 +1,5 @@
 {
-  "name": "openpose-tracker",
+  "name": "mediapipe-holistic-tracker",
   "version": "1.0.0",
   "private": true,
   "scripts": {
