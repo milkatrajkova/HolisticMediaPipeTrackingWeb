@@ -1,0 +1,186 @@
+.container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+.videoContainer {
+  position: relative;
+  width: 100%;
+  max-width: 1280px;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.video {
+  width: 100%;
+  height: auto;
+}
+
+.canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+  pointer-events: none;
+}
+
+.stats {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.statLabel {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.statValue {
+  font-weight: 700;
+  color: #00ff00;
+  font-size: 1.1rem;
+}
+
+.controls {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.button {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.startButton {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.startButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+.stopButton {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.stopButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+}
+
+.downloadButton {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+}
+
+.downloadButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+}
+
+.clearButton {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  color: white;
+}
+
+.clearButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fee140 0%, #fa709a 100%);
+}
+
+.info {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 1.5rem;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+}
+
+.info h3 {
+  margin-bottom: 1rem;
+  font-size: 1.3rem;
+}
+
+.info ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.info li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info li:last-child {
+  border-bottom: none;
+}
+
+.note {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .stats {
+    gap: 1rem;
+  }
+  
+  .stat {
+    font-size: 0.9rem;
+  }
+  
+  .controls {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .button {
+    width: 100%;
+  }
+}
+
