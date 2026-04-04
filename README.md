@@ -62,12 +62,44 @@ vercel
 - **TypeScript**: Type safety
 - **Vercel**: Hosting platform
 
+## Mobile Support
+
+The application is fully optimized for mobile devices:
+- Responsive design that adapts to all screen sizes
+- Front-facing camera support on mobile devices
+- Touch-optimized controls and UI
+- Lower resolution on mobile for better performance (640x480 vs 1280x720 on desktop)
+
 ## Browser Compatibility
 
 Requires a modern browser with WebRTC support for camera access:
 - Chrome/Edge (recommended)
 - Firefox
-- Safari
+- Safari (including iOS Safari)
+- Mobile browsers (iOS Safari, Chrome Mobile)
+
+## Custom Domain Setup on Vercel
+
+To host this on a different Vercel domain:
+
+1. **Add Domain in Vercel Dashboard:**
+   - Go to your project settings in Vercel
+   - Navigate to the "Domains" section
+   - Click "Add" and enter your custom domain
+   - Follow Vercel's instructions to configure DNS
+
+2. **Configure DNS Records:**
+   - For apex domain (e.g., `example.com`): Add an A record pointing to Vercel's IP (76.76.21.21)
+   - For subdomain (e.g., `www.example.com`): Add a CNAME record pointing to `cname.vercel-dns.com`
+   - Wait for DNS propagation (can take up to 48 hours, usually much faster)
+
+3. **SSL Certificate:**
+   - Vercel automatically provisions SSL certificates for your domain
+   - HTTPS will be enabled automatically once DNS is configured
+
+4. **Deploy:**
+   - Push your code or trigger a new deployment
+   - Your site will be available on both the default Vercel domain and your custom domain
 
 ## License
 
