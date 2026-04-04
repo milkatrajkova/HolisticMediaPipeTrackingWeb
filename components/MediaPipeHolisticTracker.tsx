@@ -609,7 +609,7 @@ export default function MediaPipeHolisticTracker({
       return;
     }
 
-    const fps = Math.min(30, Math.max(1, Math.round(extractionFps)));
+    const fps = Math.min(60, Math.max(1, Math.round(extractionFps)));
     const dt = 1 / fps;
     const totalFrames = Math.max(1, Math.ceil(video.duration * fps));
 
@@ -794,9 +794,11 @@ export default function MediaPipeHolisticTracker({
               <input
                 type="number"
                 min={1}
-                max={30}
+                max={60}
                 value={extractionFps}
-                onChange={(e) => setExtractionFps(Number(e.target.value) || 12)}
+                onChange={(e) =>
+                  setExtractionFps(Math.min(60, Math.max(1, Number(e.target.value) || 12)))
+                }
                 className={styles.fpsInput}
                 disabled={isExtracting}
               />
