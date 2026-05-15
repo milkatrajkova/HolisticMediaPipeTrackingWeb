@@ -7,7 +7,19 @@ import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import { POSE_CONNECTIONS } from '@mediapipe/pose';
 import { HAND_CONNECTIONS } from '@mediapipe/hands';
 import { FACEMESH_TESSELATION, FACEMESH_CONTOURS } from '@mediapipe/face_mesh';
+import { segmentationMaskToNormalizedPolygon, getCanvasImageSourceSize } from '@/lib/segmentationPolygon';
 import styles from './MediaPipeHolisticTracker.module.css';
+
+function pickWebmMime(): string {
+  for (const m of [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ]) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
 
 const POSE_LANDMARK_NAMES = [
   'nose',
@@ -84,6 +96,8 @@ interface FrameData {
   face: LandmarkEntry[];
   leftHand: LandmarkEntry[];
   rightHand: LandmarkEntry[];
+  /** Person silhouette as simplified closed polygon, normalized 0–1 same as landmarks (x, y). */
+  segmentation?: [number, number][];
 }
 
 type SourceMode = 'camera' | 'file';
@@ -113,6 +127,9 @@ export default function MediaPipeHolisticTracker({
   const [dataPoints, setDataPoints] = useState<FrameData[]>([]);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [frameNumber, setFrameNumber] = useState(0);
+  const [includeSegmentationJson, setIncludeSegmentationJson] = useState(true);
+  const [recordMaskWebm, setRecordMaskWebm] = useState(false);
+  const [maskVideoReady, setMaskVideoReady] = useState(false);
   const holisticRef = useRef<Holistic | null>(null);
   const cameraRef = useRef<Camera | null>(null);
   const fileVideoUrlRef = useRef<string | null>(null);
@@ -130,6 +147,42 @@ export default function MediaPipeHolisticTracker({
   const shouldResumeCameraRef = useRef(false);
   const recordedFrameRef = useRef(0);
   const isInitializingCameraRef = useRef(false);
+  const includeSegmentationJsonRef = useRef(true);
+  const recordMaskWebmRef = useRef(false);
+  const maskWorkCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskRecordCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskRecorderRef = useRef<MediaRecorder | null>(null);
+  const maskRecorderChunksRef = useRef<BlobPart[]>([]);
+  const maskVideoBlobRef = useRef<Blob | null>(null);
+  const maskMimeRef = useRef('');
+  const warnedMaskMimeRef = useRef(false);
+  const lastMaskSizeRef = useRef({ w: 0, h: 0 });
+  const maskCaptureVersionRef = useRef(0);
+
+  useEffect(() => {
+    includeSegmentationJsonRef.current = includeSegmentationJson;
+  }, [includeSegmentationJson]);
+
+  useEffect(() => {
+    recordMaskWebmRef.current = recordMaskWebm;
+  }, [recordMaskWebm]);
+
+  useEffect(() => {
+    maskWorkCanvasRef.current = document.createElement('canvas');
+    maskRecordCanvasRef.current = document.createElement('canvas');
+  }, []);
+
+  const finalizeMaskRecorder = useCallback(() => {
+    const rec = maskRecorderRef.current;
+    if (rec && rec.state === 'recording') {
+      try {
+        rec.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    maskRecorderRef.current = null;
+  }, []);
 
   const buildPoseEntries = (landmarks: any[] | undefined): LandmarkEntry[] => {
     if (!landmarks) return [];
@@ -185,6 +238,19 @@ export default function MediaPipeHolisticTracker({
       canvasRef.current.width,
       canvasRef.current.height
     );
+
+    if (results.segmentationMask) {
+      canvasCtx.save();
+      canvasCtx.globalAlpha = 0.3;
+      canvasCtx.drawImage(
+        results.segmentationMask,
+        0,
+        0,
+        canvasRef.current.width,
+        canvasRef.current.height
+      );
+      canvasCtx.restore();
+    }
 
     // Draw pose
     if (results.poseLandmarks) {
@@ -251,8 +317,73 @@ export default function MediaPipeHolisticTracker({
       setFrameNumber(frameNumberRef.current);
     }
 
+    const capturing = isRecordingRef.current || isExtractingRef.current;
+
+    let segmentationPoly: [number, number][] | undefined;
+    if (capturing && includeSegmentationJsonRef.current && results.segmentationMask && maskWorkCanvasRef.current) {
+      try {
+        const poly = segmentationMaskToNormalizedPolygon(
+          results.segmentationMask,
+          maskWorkCanvasRef.current
+        );
+        if (poly && poly.length >= 3) segmentationPoly = poly;
+      } catch (e) {
+        console.warn('segmentation polygon', e);
+      }
+    }
+
+    if (capturing && results.segmentationMask && recordMaskWebmRef.current) {
+      const { w: mw, h: mh } = getCanvasImageSourceSize(results.segmentationMask);
+      if (mw >= 2 && mh >= 2) {
+        lastMaskSizeRef.current = { w: mw, h: mh };
+        const recCanvas = maskRecordCanvasRef.current;
+        if (recCanvas) {
+          const activeRec = maskRecorderRef.current;
+          if (activeRec?.state === 'recording' && (recCanvas.width !== mw || recCanvas.height !== mh)) {
+            finalizeMaskRecorder();
+          }
+          if (!maskRecorderRef.current || maskRecorderRef.current.state !== 'recording') {
+            const mime = pickWebmMime();
+            if (mime) {
+              recCanvas.width = mw;
+              recCanvas.height = mh;
+              maskMimeRef.current = mime;
+              maskRecorderChunksRef.current = [];
+              try {
+                const stream = recCanvas.captureStream(60);
+                const rec = new MediaRecorder(stream, { mimeType: mime });
+                const versionAtRecord = maskCaptureVersionRef.current;
+                rec.ondataavailable = (e) => {
+                  if (e.data.size) maskRecorderChunksRef.current.push(e.data);
+                };
+                rec.onstop = () => {
+                  if (versionAtRecord !== maskCaptureVersionRef.current) return;
+                  const blob = new Blob(maskRecorderChunksRef.current, { type: mime });
+                  maskVideoBlobRef.current = blob;
+                  setMaskVideoReady(blob.size > 0);
+                };
+                rec.start(250);
+                maskRecorderRef.current = rec;
+              } catch (e) {
+                console.error(e);
+              }
+            } else if (!warnedMaskMimeRef.current) {
+              warnedMaskMimeRef.current = true;
+              alert('Mask WebM: no supported WebM codec in this browser.');
+            }
+          }
+          const rctx = recCanvas.getContext('2d');
+          if (rctx && maskRecorderRef.current?.state === 'recording') {
+            rctx.fillStyle = '#000000';
+            rctx.fillRect(0, 0, recCanvas.width, recCanvas.height);
+            rctx.drawImage(results.segmentationMask, 0, 0, recCanvas.width, recCanvas.height);
+          }
+        }
+      }
+    }
+
     // Track data if recording or batch-extracting from file
-    if (isRecordingRef.current || isExtractingRef.current) {
+    if (capturing) {
       const frameIdx = recordedFrameRef.current;
       recordedFrameRef.current += 1;
 
@@ -265,6 +396,7 @@ export default function MediaPipeHolisticTracker({
         face: buildFaceEntries(results.faceLandmarks),
         leftHand: buildHandEntries(results.leftHandLandmarks, 'left'),
         rightHand: buildHandEntries(results.rightHandLandmarks, 'right'),
+        ...(segmentationPoly ? { segmentation: segmentationPoly } : {}),
       };
 
       dataPointsRef.current.push(frameData);
@@ -285,7 +417,7 @@ export default function MediaPipeHolisticTracker({
       frameCountRef.current = 0;
       lastFpsUpdateRef.current = now;
     }
-  }, []);
+  }, [finalizeMaskRecorder]);
 
   const setDefaultCanvasSize = () => {
     if (!canvasRef.current) return;
@@ -377,8 +509,8 @@ export default function MediaPipeHolisticTracker({
     holistic.setOptions({
       modelComplexity: isMobile ? 1 : 2,
       smoothLandmarks: true,
-      enableSegmentation: false,
-      smoothSegmentation: false,
+      enableSegmentation: true,
+      smoothSegmentation: true,
       refineFaceLandmarks: !isMobile,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5,
@@ -581,6 +713,12 @@ export default function MediaPipeHolisticTracker({
     setFrameNumber(0);
     isRecordingFrameCountRef.current = true;
 
+    finalizeMaskRecorder();
+    maskCaptureVersionRef.current += 1;
+    maskVideoBlobRef.current = null;
+    setMaskVideoReady(false);
+    maskRecorderChunksRef.current = [];
+
     isRecordingRef.current = true;
     setIsRecording(true);
     lastCaptureKindRef.current = 'camera';
@@ -590,6 +728,7 @@ export default function MediaPipeHolisticTracker({
     isRecordingRef.current = false;
     setIsRecording(false);
     isRecordingFrameCountRef.current = false;
+    finalizeMaskRecorder();
   };
 
   const backToCamera = () => {
@@ -621,6 +760,12 @@ export default function MediaPipeHolisticTracker({
     isExtractingRef.current = true;
     video.pause();
 
+    finalizeMaskRecorder();
+    maskCaptureVersionRef.current += 1;
+    maskVideoBlobRef.current = null;
+    setMaskVideoReady(false);
+    maskRecorderChunksRef.current = [];
+
     try {
       for (let i = 0; i < totalFrames; i++) {
         const t = Math.min(i * dt, video.duration - 1e-3);
@@ -639,6 +784,7 @@ export default function MediaPipeHolisticTracker({
       if (dataPointsRef.current.length > 0) {
         lastCaptureKindRef.current = 'file';
       }
+      finalizeMaskRecorder();
     }
   };
 
@@ -657,6 +803,25 @@ export default function MediaPipeHolisticTracker({
         createdAt: new Date().toISOString(),
         sampleCount: pointsToDownload.length,
         source: lastCaptureKindRef.current,
+        ...(includeSegmentationJson
+          ? {
+              segmentationExport: {
+                format: 'polygon2d',
+                coordinates: 'normalized_xy',
+                note: 'Optional per-frame field segmentation: [x,y] in 0–1, same convention as landmarks.',
+              },
+            }
+          : {}),
+        ...(maskVideoBlobRef.current && maskVideoBlobRef.current.size > 0
+          ? {
+              maskVideoSidecar: {
+                mime: maskMimeRef.current,
+                width: lastMaskSizeRef.current.w,
+                height: lastMaskSizeRef.current.h,
+                note: 'Download the pixel mask WebM separately (Download mask video).',
+              },
+            }
+          : {}),
         ...(lastCaptureKindRef.current === 'file' && lastVideoFileNameRef.current
           ? { videoFileName: lastVideoFileNameRef.current, extractionFps }
           : {}),
@@ -680,7 +845,30 @@ export default function MediaPipeHolisticTracker({
     URL.revokeObjectURL(url);
   };
 
+  const downloadMaskVideo = () => {
+    const blob = maskVideoBlobRef.current;
+    if (!blob || blob.size === 0) {
+      alert('No mask video yet. Enable “Record mask video” and record or extract first.');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const trimmedName = participantName.trim();
+    const fileSafeName = trimmedName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'session';
+    link.download = `mediapipe-mask-${fileSafeName}-${Date.now()}.webm`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const clearData = () => {
+    maskCaptureVersionRef.current += 1;
+    finalizeMaskRecorder();
     dataPointsRef.current = [];
     setDataPoints([]);
     recordedFrameRef.current = 0;
@@ -689,6 +877,9 @@ export default function MediaPipeHolisticTracker({
     isRecordingFrameCountRef.current = false;
     lastVideoFileNameRef.current = null;
     lastCaptureKindRef.current = 'camera';
+    maskVideoBlobRef.current = null;
+    setMaskVideoReady(false);
+    maskRecorderChunksRef.current = [];
   };
 
   const toggleCamera = async () => {
@@ -764,6 +955,36 @@ export default function MediaPipeHolisticTracker({
             <span className={styles.hudValue}>{dataPoints.length}</span>
           </span>
         </div>
+      </div>
+
+      <div className={styles.segOptions}>
+        <label className={styles.segCheck}>
+          <input
+            type="checkbox"
+            checked={includeSegmentationJson}
+            onChange={(e) => setIncludeSegmentationJson(e.target.checked)}
+            disabled={isRecording || isExtracting}
+          />
+          Body mask polygon in JSON
+        </label>
+        <label className={styles.segCheck}>
+          <input
+            type="checkbox"
+            checked={recordMaskWebm}
+            onChange={(e) => setRecordMaskWebm(e.target.checked)}
+            disabled={isRecording || isExtracting}
+          />
+          Record mask WebM (sidecar)
+        </label>
+        <button
+          type="button"
+          onClick={downloadMaskVideo}
+          className={`${styles.button} ${styles.neutralButton}`}
+          disabled={!maskVideoReady || isExtracting}
+        >
+          <span aria-hidden>🎞</span>
+          Download mask video
+        </button>
       </div>
 
       <div className={styles.controls}>
@@ -899,9 +1120,13 @@ export default function MediaPipeHolisticTracker({
             <span className={styles.infoLabel}>Right Hand</span>
             <span>21 keypoints</span>
           </li>
+          <li className={styles.infoItem}>
+            <span className={styles.infoLabel}>Segmentation</span>
+            <span>Person mask (optional polygon in JSON + WebM sidecar)</span>
+          </li>
         </ul>
         <p className={styles.infoNote}>
-          Total: <strong>543 detection points</strong> per frame
+          Total: <strong>543 detection points</strong> per frame (plus optional segmentation)
         </p>
       </div>
     </div>
